@@ -1,181 +1,199 @@
 import streamlit as st
 import pandas as pd
-from sklearn.model_selection import train_test_split
+import numpy as np
+import pickle
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# ------------------- Page Config -------------------
-st.set_page_config(page_title="Spam News Detection", page_icon="📰", layout="wide")
+# -------------------------------
+# Page config
+# -------------------------------
+st.set_page_config(
+    page_title="Spam News Detection",
+    page_icon="📰",
+    layout="wide"
+)
 
-# ------------------- Custom CSS -------------------
+# -------------------------------
+# Custom CSS Styling
+# -------------------------------
 st.markdown("""
     <style>
-    /* Background */
-    .stApp {
-        background: linear-gradient(135deg, #1e3c72, #2a5298);
-        color: white;
-        font-family: 'Poppins', sans-serif;
-    }
-    /* Header */
-    .main-header {
-        text-align: center;
-        font-size: 2.5rem;
-        font-weight: bold;
-        margin-bottom: 1rem;
-        background: linear-gradient(90deg, #6a11cb, #2575fc);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-    /* Card Style */
-    .card {
-        background-color: white;
-        color: black;
-        padding: 1.5rem;
-        border-radius: 12px;
-        box-shadow: 0px 4px 12px rgba(0,0,0,0.2);
-        margin-bottom: 1.5rem;
-    }
-    /* Buttons */
-    .stButton>button {
-        background: linear-gradient(90deg, #2575fc, #6a11cb);
-        color: white;
-        border: none;
-        padding: 0.6rem 1.5rem;
-        border-radius: 8px;
-        font-size: 1rem;
-        font-weight: bold;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        transform: scale(1.05);
-        box-shadow: 0px 4px 12px rgba(0,0,0,0.4);
-    }
-    /* Footer */
-    footer {
-        text-align: center;
-        margin-top: 3rem;
-        color: #ddd;
-    }
-    footer a {
-        color: #fff;
-        text-decoration: none;
-        margin: 0 8px;
-    }
-    footer a:hover {
-        text-decoration: underline;
-    }
+        body {
+            background: linear-gradient(to right, #1e3c72, #2a5298);
+            color: white !important;
+        }
+        .stTextInput label, .stTextArea label, .stSelectbox label, .stNumberInput label, .stSlider label {
+            color: white !important;
+        }
+        h1, h2, h3, h4, h5, h6, p {
+            color: white !important;
+        }
+        .stTabs [data-baseweb="tab"] p {
+            color: white !important;
+            font-weight: bold;
+        }
+        .stAlert {
+            background-color: #fff3cd !important;
+            color: black !important;
+            border: 1px solid #ffeeba;
+        }
+        .custom-footer {
+            text-align: center;
+            color: white !important;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .custom-footer a {
+            color: white !important;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .custom-footer a:hover {
+            text-decoration: underline;
+        }
     </style>
 """, unsafe_allow_html=True)
 
-# ------------------- App Title -------------------
-st.markdown("<div class='main-header'>📰 Spam News Detection</div>", unsafe_allow_html=True)
+# -------------------------------
+# Load Default Dataset
+# -------------------------------
+@st.cache_data
+def load_default_data():
+    return pd.read_csv("spam_news_1000.csv")
 
-# ------------------- Sidebar Controls -------------------
-st.sidebar.header("Upload Dataset (CSV with 'text' and 'label')")
-uploaded_file = st.sidebar.file_uploader("Upload CSV", type="csv")
+# -------------------------------
+# Train Model
+# -------------------------------
+def train_model(data, max_features=5000, ngram_range=(1,1)):
+    X = data['text']
+    y = data['label']
 
-val_size = st.sidebar.slider("Validation split", 0.1, 0.5, 0.2, 0.05)
-ngram = st.sidebar.selectbox("Max n-gram", [1, 2])
-max_features = st.sidebar.slider("Max features", 5000, 30000, 20000, 1000)
-random_state = st.sidebar.number_input("Random state", min_value=0, value=42, step=1)
+    vectorizer = TfidfVectorizer(max_features=max_features, ngram_range=ngram_range)
+    X_tfidf = vectorizer.fit_transform(X)
 
-# ------------------- Load Data -------------------
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-else:
-    df = pd.DataFrame({
-        "text": [
-            "Congratulations! You have won a free iPhone",
-            "Government announces new digital education policy",
-            "Urgent: Verify your bank account immediately",
-            "NASA successfully launches satellite for weather monitoring",
-            "Claim your free gift card before midnight"
-        ],
-        "label": [1, 0, 1, 0, 1]
-    })
+    model = LogisticRegression(max_iter=1000)
+    model.fit(X_tfidf, y)
 
-# ------------------- Tabs -------------------
+    return model, vectorizer
+
+# -------------------------------
+# App Layout
+# -------------------------------
+st.title("📰 Spam News Detection")
+
 tab1, tab2, tab3 = st.tabs(["📊 Train & Evaluate", "🤖 Predictions", "ℹ️ About"])
 
-# ------------------- Train & Evaluate -------------------
+# -------------------------------
+# Shared Variables
+# -------------------------------
+if "data" not in st.session_state:
+    st.session_state.data = load_default_data()
+    st.session_state.model, st.session_state.vectorizer = train_model(st.session_state.data)
+
+# -------------------------------
+# Tab 1: Train & Evaluate
+# -------------------------------
 with tab1:
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.subheader("Upload Dataset (optional)")
+    uploaded_file = st.file_uploader("Upload CSV with 'text' and 'label' columns", type="csv")
+
+    if uploaded_file is not None:
+        new_data = pd.read_csv(uploaded_file)
+        if "text" in new_data.columns and "label" in new_data.columns:
+            st.session_state.data = new_data
+            st.session_state.model, st.session_state.vectorizer = train_model(new_data)
+            st.success("✅ Model retrained on uploaded dataset!")
+        else:
+            st.error("❌ CSV must contain 'text' and 'label' columns")
+
     st.subheader("Dataset Preview")
-    st.dataframe(df.head())
+    st.dataframe(st.session_state.data.head())
 
-    if st.button("Train / Re-train"):
-        X_train, X_val, y_train, y_val = train_test_split(
-            df['text'], df['label'], test_size=val_size, random_state=random_state
-        )
-        vectorizer = TfidfVectorizer(max_features=max_features, ngram_range=(1, ngram))
-        X_train_vec = vectorizer.fit_transform(X_train)
-        X_val_vec = vectorizer.transform(X_val)
+    X = st.session_state.data['text']
+    y = st.session_state.data['label']
+    preds = st.session_state.model.predict(st.session_state.vectorizer.transform(X))
 
-        model = LogisticRegression(max_iter=1000)
-        model.fit(X_train_vec, y_train)
-        y_pred = model.predict(X_val_vec)
+    acc = accuracy_score(y, preds)
+    prec = precision_score(y, preds)
+    rec = recall_score(y, preds)
+    f1 = f1_score(y, preds)
 
-        acc = accuracy_score(y_val, y_pred)
-        prec = precision_score(y_val, y_pred)
-        rec = recall_score(y_val, y_pred)
-        f1 = f1_score(y_val, y_pred)
+    st.write(f"**Accuracy:** {acc:.3f}")
+    st.write(f"**Precision:** {prec:.3f}")
+    st.write(f"**Recall:** {rec:.3f}")
+    st.write(f"**F1 Score:** {f1:.3f}")
 
-        st.markdown("### 📈 Performance Metrics")
-        st.write(f"**Accuracy:** {acc:.3f}")
-        st.write(f"**Precision:** {prec:.3f}")
-        st.write(f"**Recall:** {rec:.3f}")
-        st.write(f"**F1 Score:** {f1:.3f}")
+    st.subheader("Confusion Matrix")
+    cm = confusion_matrix(y, preds)
+    fig, ax = plt.subplots()
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=["REAL", "SPAM"], yticklabels=["REAL", "SPAM"], ax=ax)
+    st.pyplot(fig)
 
-        cm = confusion_matrix(y_val, y_pred)
-        fig, ax = plt.subplots()
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=["REAL", "SPAM"], yticklabels=["REAL", "SPAM"], ax=ax)
-        ax.set_xlabel("Predicted")
-        ax.set_ylabel("True")
-        st.pyplot(fig)
-    st.markdown("</div>", unsafe_allow_html=True)
+    # -------------------------------
+    # Download Trained Model
+    # -------------------------------
+    st.subheader("📥 Download Trained Model")
+    model_bytes = pickle.dumps({
+        "model": st.session_state.model,
+        "vectorizer": st.session_state.vectorizer
+    })
+    st.download_button(
+        label="💾 Download Model (.pkl)",
+        data=model_bytes,
+        file_name="spam_news_model.pkl",
+        mime="application/octet-stream"
+    )
 
-# ------------------- Predictions -------------------
+# -------------------------------
+# Tab 2: Predictions
+# -------------------------------
 with tab2:
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.subheader("Live Predictions")
-    user_input = st.text_area("Enter news text to check if it's SPAM or REAL:")
+    user_input = st.text_area("✍️ Enter news text to check if it's SPAM or REAL:")
 
     if st.button("Predict"):
-        if 'model' in locals():
-            vec_input = vectorizer.transform([user_input])
-            prediction = model.predict(vec_input)[0]
-            label = "🚨 SPAM / FAKE" if prediction == 1 else "✅ REAL"
-            st.markdown(f"### Prediction: {label}")
+        if user_input.strip() == "":
+            st.warning("⚠️ Please enter some text.")
         else:
-            st.warning("⚠️ Please train the model first in the 'Train & Evaluate' tab.")
-    st.markdown("</div>", unsafe_allow_html=True)
+            input_features = st.session_state.vectorizer.transform([user_input])
+            prediction = st.session_state.model.predict(input_features)[0]
+            if prediction == 1:
+                st.error("🚨 This news looks like **SPAM/FAKE** ❌")
+            else:
+                st.success("✅ This news looks **REAL** 📰")
 
-# ------------------- About -------------------
+# -------------------------------
+# Tab 3: About
+# -------------------------------
 with tab3:
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.subheader("ℹ️ About This Project")
-    st.write("""
-    This project uses **TF-IDF + Logistic Regression** to classify news text as **REAL (0)** or **SPAM/FAKE (1)**.  
-    Built with **Python, Scikit-learn, Pandas, and Streamlit**, it allows:  
+    st.markdown("""
+    This project uses **TF-IDF + Logistic Regression** to classify news text as REAL (0) or SPAM/FAKE (1).  
+    Built with **Python, Scikit-learn, Pandas, and Streamlit**, it allows:
     - 📊 Interactive training and evaluation  
     - 📈 Performance visualization  
     - 🤖 Live predictions  
+    - 📂 Upload new dataset for retraining  
+    - 💾 Download trained model for reuse  
 
-    ✨ The UI is styled with custom CSS (gradient background, modern buttons, card layout).
+    🔗 Links:  
+    - [🌐 Live App](https://spamnewsdetection-99auakb9rgcjtevzkh8xa7.streamlit.app/)  
+    - [💻 GitHub Repository](https://github.com/pruthvirajtarode/SpamNewsDetection)  
+    - [👨‍💼 LinkedIn](https://www.linkedin.com/in/pruthviraj-tarode-616ab1258/)  
     """)
-    st.markdown("</div>", unsafe_allow_html=True)
 
-# ------------------- Footer -------------------
-st.markdown(
-    """
-    <footer>
-        © 2025 Pruthviraj Tarode — Spam News Detection |
-        <a href="https://www.linkedin.com/in/pruthviraj-tarode-616ab1258/" target="_blank">LinkedIn</a> •
-        <a href="https://github.com/pruthvirajtarode/SpamNewsDetection" target="_blank">GitHub</a>
-    </footer>
-    """,
-    unsafe_allow_html=True
-)
+# -------------------------------
+# Footer
+# -------------------------------
+st.markdown("""
+<div class="custom-footer">
+© 2025 Pruthviraj Tarode — Spam News Detection | 
+<a href="https://github.com/pruthvirajtarode/SpamNewsDetection" target="_blank">GitHub</a> • 
+<a href="https://www.linkedin.com/in/pruthviraj-tarode-616ab1258/" target="_blank">LinkedIn</a>
+</div>
+""", unsafe_allow_html=True)
