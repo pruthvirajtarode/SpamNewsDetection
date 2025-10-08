@@ -1,79 +1,169 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from sklearn.pipeline import Pipeline
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix, ConfusionMatrixDisplay
-import joblib, os
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
-st.set_page_config(page_title="Spam News Detection", page_icon="📰", layout="wide")
+# ------------------ Custom CSS ------------------
+st.markdown("""
+    <style>
+    /* Global background */
+    .stApp {
+        background: linear-gradient(to right, #1e3c72, #2a5298);
+        font-family: 'Poppins', sans-serif;
+    }
 
-st.title("📰 Spam News Detection")
+    /* Header */
+    .main-header {
+        text-align: center;
+        padding: 2rem;
+        font-size: 2.8rem;
+        font-weight: bold;
+        background: linear-gradient(90deg, #6a11cb 0%, #2575fc 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
 
-uploaded_csv = st.sidebar.file_uploader("Upload Dataset (CSV with 'text' and 'label')", type=["csv"])
-if uploaded_csv is not None:
-    df = pd.read_csv(uploaded_csv)
-else:
-    df = pd.read_csv("spam_news_1000.csv")
+    /* Card */
+    .card {
+        background-color: white;
+        color: black;
+        padding: 1.5rem;
+        margin-top: 1rem;
+        border-radius: 16px;
+        box-shadow: 0px 6px 18px rgba(0,0,0,0.25);
+    }
 
-tab1, tab2 = st.tabs(["Train & Evaluate","Predictions"])
+    /* Buttons */
+    .stButton>button {
+        background: linear-gradient(90deg, #2575fc, #6a11cb);
+        color: white;
+        border: none;
+        padding: 0.6rem 1.5rem;
+        border-radius: 10px;
+        font-size: 1rem;
+        font-weight: bold;
+        transition: 0.3s;
+    }
+    .stButton>button:hover {
+        transform: scale(1.05);
+        box-shadow: 0px 4px 14px rgba(0,0,0,0.4);
+    }
 
-with tab1:
-    st.subheader("Dataset Preview")
-    st.dataframe(df.head())
+    /* Footer */
+    footer {
+        text-align: center;
+        margin-top: 3rem;
+        padding: 1rem;
+        color: #ddd;
+        font-size: 0.9rem;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-    if st.button("Train / Re-train"):
-        if 'text' in df.columns and 'label' in df.columns:
-            Xtr, Xval, ytr, yval = train_test_split(df['text'], df['label'], test_size=0.2, random_state=42)
-            pipe = Pipeline([('tfidf',TfidfVectorizer(max_features=20000, ngram_range=(1,2))),
-                             ('clf',LogisticRegression(max_iter=400))])
-            pipe.fit(Xtr,ytr); preds = pipe.predict(Xval)
-            acc = accuracy_score(yval,preds)
-            prec, rec, f1,_ = precision_recall_fscore_support(yval,preds,average='binary')
-            cm = confusion_matrix(yval,preds)
-            st.success(f"Accuracy: {acc:.3f}, Precision: {prec:.3f}, Recall: {rec:.3f}, F1: {f1:.3f}")
-            fig, ax = plt.subplots()
-            disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['Real','Spam'])
-            disp.plot(ax=ax)
-            st.pyplot(fig)
-            os.makedirs("models", exist_ok=True)
-            joblib.dump(pipe,"models/model.joblib")
+# ------------------ Header ------------------
+st.markdown("<div class='main-header'>📰 Spam News Detection</div>", unsafe_allow_html=True)
+
+# ------------------ Tabs ------------------
+tabs = st.tabs(["📊 Train & Evaluate", "🔮 Predictions", "ℹ️ About"])
+
+# ------------------ Train & Evaluate ------------------
+with tabs[0]:
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.subheader("📊 Dataset Preview")
+
+    uploaded_file = st.file_uploader("Upload Dataset (CSV with 'text' and 'label')", type=["csv"])
+    if uploaded_file is not None:
+        data = pd.read_csv(uploaded_file)
+    else:
+        data = pd.read_csv("spam_news_1000.csv")  # default dataset
+
+    st.dataframe(data.head())
+
+    # Parameters
+    validation_split = st.slider("Validation split", 0.1, 0.5, 0.2)
+    max_features = st.slider("Max features", 500, 20000, 5000)
+    ngram_range = st.selectbox("Max n-gram", [1, 2])
+
+    if st.button("🚀 Train / Re-train"):
+        X_train, X_test, y_train, y_test = train_test_split(
+            data['text'], data['label'], test_size=validation_split, random_state=42
+        )
+
+        vectorizer = TfidfVectorizer(max_features=max_features, ngram_range=(1, ngram_range))
+        X_train_vec = vectorizer.fit_transform(X_train)
+        X_test_vec = vectorizer.transform(X_test)
+
+        model = LogisticRegression()
+        model.fit(X_train_vec, y_train)
+        y_pred = model.predict(X_test_vec)
+
+        st.success("✅ Model trained successfully!")
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Accuracy", round(accuracy_score(y_test, y_pred), 3))
+        col2.metric("Precision", round(precision_score(y_test, y_pred), 3))
+        col3.metric("Recall", round(recall_score(y_test, y_pred), 3))
+        col4.metric("F1-score", round(f1_score(y_test, y_pred), 3))
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ------------------ Predictions ------------------
+with tabs[1]:
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.subheader("🔮 Live Predictions")
+
+    user_input = st.text_area("✍️ Enter one text per line")
+
+    if st.button("✨ Predict"):
+        if uploaded_file is not None:
+            data = pd.read_csv(uploaded_file)
         else:
-            st.error("Dataset must have 'text' and 'label' columns.")
+            data = pd.read_csv("spam_news_1000.csv")
 
-with tab2:
-    st.subheader("Live Predictions")
-    txt = st.text_area("Enter one text per line",
-                       "Congratulations! You won a prize\nGovernment launches new education policy")
-    uploaded_pred_file = st.file_uploader("Or upload a CSV with 'text' column", type=["csv"], key="pred")
+        vectorizer = TfidfVectorizer(max_features=5000, ngram_range=(1, 2))
+        X = vectorizer.fit_transform(data['text'])
+        model = LogisticRegression().fit(X, data['label'])
 
-    if st.button("Predict"):
-        if os.path.exists("models/model.joblib"):
-            pipe = joblib.load("models/model.joblib")
-            results = pd.DataFrame()
-
-            if txt.strip():
-                lines = [t.strip() for t in txt.splitlines() if t.strip()]
-                preds = pipe.predict(lines)
-                results = pd.DataFrame({"text": lines, "prediction": preds}).replace({"prediction":{0:"REAL (0)",1:"SPAM (1)"}})
-
-            if uploaded_pred_file is not None:
-                pred_df = pd.read_csv(uploaded_pred_file)
-                if "text" in pred_df.columns:
-                    preds = pipe.predict(pred_df['text'].astype(str))
-                    pred_df["prediction"] = preds
-                    pred_df = pred_df.replace({"prediction":{0:"REAL (0)",1:"SPAM (1)"}})
-                    results = pd.concat([results, pred_df], ignore_index=True)
-                else:
-                    st.error("CSV must contain a 'text' column.")
-
-            if not results.empty:
-                st.dataframe(results)
-                st.download_button("Download predictions CSV",
-                                   results.to_csv(index=False).encode(),
-                                   "predictions.csv","text/csv")
+        if user_input.strip():
+            lines = user_input.split("\n")
+            preds = model.predict(vectorizer.transform(lines))
+            results = pd.DataFrame({"text": lines, "prediction": preds})
+            results['prediction'] = results['prediction'].map({
+                0: "✅ REAL (0)",
+                1: "❌ SPAM/FAKE (1)"
+            })
+            st.table(results)
         else:
-            st.warning("Train a model first in the Train & Evaluate tab.")
+            st.warning("⚠️ Please enter some text.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ------------------ About ------------------
+with tabs[2]:
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.subheader("ℹ️ About This Project")
+    st.write("""
+        This project uses **TF-IDF + Logistic Regression** to classify news text as **REAL (0)** or **SPAM/FAKE (1)**.  
+        Built with **Python, Scikit-learn, Pandas, and Streamlit**, it allows:
+        - 📊 Interactive training and evaluation  
+        - 📈 Performance visualization  
+        - 🔮 Live predictions  
+
+        ✨ The UI is styled with custom CSS (gradient background, modern buttons, card layout).  
+    """)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ------------------ Footer ------------------
+st.markdown(
+    """
+    <footer>
+        © 2025 Pruthviraj Tarode — Spam News Detection |
+        <a href="https://www.linkedin.com/in/pruthvirajtarode" target="_blank">LinkedIn</a> •
+        <a href="https://github.com/pruthvirajtarode" target="_blank">GitHub</a>
+    </footer>
+    """,
+    unsafe_allow_html=True
+)
