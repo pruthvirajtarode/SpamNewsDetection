@@ -1,39 +1,37 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
-# ------------------ Custom CSS ------------------
+# ------------------ CSS Styling ------------------
 st.markdown("""
     <style>
-    /* Global background */
     .stApp {
         background: linear-gradient(to right, #1e3c72, #2a5298);
         font-family: 'Poppins', sans-serif;
+        color: #222;
     }
 
     /* Header */
     .main-header {
         text-align: center;
-        padding: 2rem;
+        padding: 1.5rem;
         font-size: 2.8rem;
-        font-weight: bold;
-        background: linear-gradient(90deg, #6a11cb 0%, #2575fc 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        font-weight: 800;
+        color: white;
+        text-shadow: 1px 1px 4px rgba(0,0,0,0.5);
     }
 
     /* Card */
     .card {
-        background-color: white;
-        color: black;
+        background: #ffffff;
+        color: #222;
         padding: 1.5rem;
+        border-radius: 14px;
+        box-shadow: 0px 4px 16px rgba(0,0,0,0.25);
         margin-top: 1rem;
-        border-radius: 16px;
-        box-shadow: 0px 6px 18px rgba(0,0,0,0.25);
     }
 
     /* Buttons */
@@ -48,8 +46,15 @@ st.markdown("""
         transition: 0.3s;
     }
     .stButton>button:hover {
-        transform: scale(1.05);
-        box-shadow: 0px 4px 14px rgba(0,0,0,0.4);
+        transform: scale(1.07);
+        box-shadow: 0px 4px 14px rgba(0,0,0,0.5);
+    }
+
+    /* Table */
+    .dataframe {
+        background: white;
+        color: black;
+        border-radius: 12px;
     }
 
     /* Footer */
@@ -57,9 +62,10 @@ st.markdown("""
         text-align: center;
         margin-top: 3rem;
         padding: 1rem;
-        color: #ddd;
+        color: #eee;
         font-size: 0.9rem;
     }
+    footer a { color: #fff; text-decoration: underline; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -78,11 +84,10 @@ with tabs[0]:
     if uploaded_file is not None:
         data = pd.read_csv(uploaded_file)
     else:
-        data = pd.read_csv("spam_news_1000.csv")  # default dataset
+        data = pd.read_csv("spam_news_1000.csv")
 
     st.dataframe(data.head())
 
-    # Parameters
     validation_split = st.slider("Validation split", 0.1, 0.5, 0.2)
     max_features = st.slider("Max features", 500, 20000, 5000)
     ngram_range = st.selectbox("Max n-gram", [1, 2])
@@ -91,7 +96,6 @@ with tabs[0]:
         X_train, X_test, y_train, y_test = train_test_split(
             data['text'], data['label'], test_size=validation_split, random_state=42
         )
-
         vectorizer = TfidfVectorizer(max_features=max_features, ngram_range=(1, ngram_range))
         X_train_vec = vectorizer.fit_transform(X_train)
         X_test_vec = vectorizer.transform(X_test)
@@ -152,7 +156,7 @@ with tabs[2]:
         - 📈 Performance visualization  
         - 🔮 Live predictions  
 
-        ✨ The UI is styled with custom CSS (gradient background, modern buttons, card layout).  
+        ✨ The UI is styled with custom CSS (gradient background, white cards, modern buttons).
     """)
     st.markdown("</div>", unsafe_allow_html=True)
 
